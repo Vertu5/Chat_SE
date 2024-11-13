@@ -30,26 +30,26 @@ int main(int argc, char* argv[]) {
         // Parsing arguments
         g_opts = parseArgs(argc, argv);
 
-        // Configuration of pipe paths
+        // Configuration des pipe paths
         g_sendPipePath = PIPE_PATH + g_opts.user + "-" + g_opts.dest + PIPE_EXT;
         g_receivePipePath = PIPE_PATH + g_opts.dest + "-" + g_opts.user + PIPE_EXT;
 
-        // Creation of pipes
+        // Création des pipes
         createPipes(g_sendPipePath, g_receivePipePath);
         g_pipesOpened = true;
         g_signalStage = RUNNING;
 
-        // Create the appropriate mode
+        // Création du mode approprié
         std::unique_ptr<ChatMode> mode;
-        if (g_opts.isBot) {
-            mode.reset(new BotMode(g_opts, g_sendPipePath, g_receivePipePath));
-        } else if (g_opts.isManual) {
+        if (g_opts.isManual) {  // On vérifie d'abord le mode manuel
             mode.reset(new ManualMode(g_opts, g_sendPipePath, g_receivePipePath));
+        } else if (g_opts.isBot) {  // Ensuite le mode bot si pas de mode manuel
+            mode.reset(new BotMode(g_opts, g_sendPipePath, g_receivePipePath));
         } else {
             mode.reset(new NormalMode(g_opts, g_sendPipePath, g_receivePipePath));
         }
 
-        // Fork the process
+        // Fork du processus
         pid_t pid = fork();
         if (pid < 0) {
             std::cerr << "Erreur fork" << std::endl;
@@ -58,22 +58,22 @@ int main(int argc, char* argv[]) {
         }
 
         if (pid == 0) {
-            // Child process
-            // Child ignores SIGINT
+            // Processus enfant
+            // L'enfant ignore SIGINT
             signal(SIGINT, SIG_IGN);
             mode->runChildProcess();
             exit(SUCCESS);
         } else {
-            // Parent process
-            // Setup signal handlers
+            // Processus parent
+            // Configuration des gestionnaires de signaux
             setupSignalHandlers();
 
-            // Display welcome message
+            // Affichage du message de bienvenue
             displayWelcome(g_opts);
 
             mode->runParentProcess();
 
-            // Cleanup
+            // Nettoyage
             g_running = 0;
             kill(pid, SIGTERM);
             int status;
