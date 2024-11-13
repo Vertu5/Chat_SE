@@ -1,3 +1,4 @@
+// manual_mode.cpp
 #include "manual_mode.hpp"
 #include <unistd.h>
 #include <fcntl.h>
@@ -22,11 +23,8 @@ void ManualMode::runParentProcess() {
     int writeFd;
     while (!g_shutdown) {
         writeFd = open(sendPipe.c_str(), O_WRONLY | O_NONBLOCK);
-        if (writeFd != -1) {
-            break;
-        }
+        if (writeFd != -1) break;
         if (errno == ENXIO) {
-            // No reader yet, sleep and retry
             usleep(500000);
         } else {
             std::cerr << "Erreur ouverture pipe écriture" << std::endl;
@@ -34,7 +32,6 @@ void ManualMode::runParentProcess() {
         }
     }
 
-    // Set writeFd to blocking mode
     int flags = fcntl(writeFd, F_GETFL, 0);
     if (flags == -1) {
         std::cerr << "Erreur récupération flags" << std::endl;
@@ -50,19 +47,19 @@ void ManualMode::runParentProcess() {
 
     std::string line;
     while (!g_shutdown && g_running) {
-        // Check for signals
         if (g_sigintReceived) {
-            // Display pending messages on SIGINT
             if (sharedMem) {
                 std::cout << "\n";
                 sharedMem->displayMessages();
                 std::cout << "Message: " << std::flush;
             }
             g_sigintReceived = 0;
+            // Clear std::cin error state
+            std::cin.clear();
+            continue;
         }
 
         if (g_displayPendingMessages) {
-            // Display messages when buffer exceeds 4096 bytes
             if (sharedMem) {
                 std::cout << "\n";
                 sharedMem->displayMessages();
@@ -80,17 +77,17 @@ void ManualMode::runParentProcess() {
 
         std::cout << "Message: " << std::flush;
 
-        if (!std::cin.good() || g_shutdown) {
-            g_running = 0;
-            break;
-        }
+        // if (!std::cin.good() || g_shutdown) {
+        //     g_running = 0;
+        //     break;
+        // }
 
         std::getline(std::cin, line);
 
-        if (std::cin.eof() || line == "exit" || g_shutdown) {
-            g_running = 0;
-            break;
-        }
+        // if (std::cin.eof() || line == "exit" || g_shutdown) {
+        //     g_running = 0;
+        //     break;
+        // }
 
         Message msg;
         strncpy(msg.from, opts.user.c_str(), MAX_PSEUDO_LENGTH);
@@ -99,19 +96,17 @@ void ManualMode::runParentProcess() {
 
         ssize_t bytesWritten = write(writeFd, &msg, sizeof(Message));
         if (bytesWritten <= 0) {
-            if (errno == EINTR) {
-                continue;  // Interrupted, retry
-            } else {
-                std::cerr << "Erreur d'écriture" << std::endl;
-                g_running = 0;
-                break;
-            }
+            if (errno == EINTR) continue;
+            std::cerr << "Erreur d'écriture" << std::endl;
+            g_running = 0;
+            break;
         }
 
-        // Display our message
-        displayMessage(msg, false);
+        // Utiliser displayMessage avec le flag isBot
+        if (!opts.isBot) {
+            displayMessage(msg, opts.isBot);
+        }
 
-        // After sending, display any pending messages
         if (sharedMem) {
             sharedMem->displayMessages();
         }
@@ -121,9 +116,8 @@ void ManualMode::runParentProcess() {
 }
 
 void ManualMode::runChildProcess() {
-    signal(SIGINT, SIG_IGN);  // Child ignores SIGINT
+    signal(SIGINT, SIG_IGN);
 
-    // Open the receive pipe in blocking mode
     int readFd = open(receivePipe.c_str(), O_RDONLY);
     if (readFd == -1) {
         std::cerr << "Erreur ouverture pipe lecture" << std::endl;
@@ -138,36 +132,30 @@ void ManualMode::runChildProcess() {
 
         if (bytesRead > 0) {
             communicationStarted = true;
-
-            // Emit a beep on reception
             std::cout << '\a' << std::flush;
 
-            // Format and store the message
-            std::string formattedMsg = "\x1B[4m[" + std::string(msg.from) + "]\x1B[0m " + msg.content;
-            sharedMem->addMessage(formattedMsg);
+            // Utiliser directement Message pour stocker
+            sharedMem->addMessage(
+                opts.isBot ? 
+                    "[" + std::string(msg.from) + "] " + msg.content :
+                    "\x1B[4m[" + std::string(msg.from) + "]\x1B[0m " + msg.content
+            );
 
-            // Signal parent if necessary
             if (sharedMem->shouldDisplay()) {
                 kill(getppid(), SIGUSR1);
             }
         } else if (bytesRead == 0) {
             if (communicationStarted) {
-                // The write end of the pipe has been closed
                 std::cout << "\nL'autre utilisateur s'est déconnecté." << std::endl;
                 g_running = 0;
                 break;
-            } else {
-                // Haven't started communication yet, continue waiting
-                continue;
             }
+            continue;
         } else {
-            if (errno == EINTR) {
-                continue;  // Interrupted, retry
-            } else {
-                std::cerr << "Erreur de lecture du pipe" << std::endl;
-                g_running = 0;
-                break;
-            }
+            if (errno == EINTR) continue;
+            std::cerr << "Erreur de lecture du pipe" << std::endl;
+            g_running = 0;
+            break;
         }
     }
 
@@ -176,4 +164,3 @@ void ManualMode::runChildProcess() {
 }
 
 }
-
