@@ -10,7 +10,11 @@ void ProgramOptions::print() const {
     std::cout << "\nConfiguration du chat :" << std::endl;
     std::cout << "- Utilisateur : " << user << std::endl;
     std::cout << "- Destinataire : " << dest << std::endl;
-    std::cout << "- Mode : " << (isBot ? "bot" : (isManual ? "manuel" : "normal")) << std::endl;
+    std::string mode = "normal";
+    if (isBot && isManual) mode = "bot + manuel";
+    else if (isBot) mode = "bot";
+    else if (isManual) mode = "manuel";
+    std::cout << "- Mode : " << mode << std::endl;
 }
 
 bool validatePseudo(const std::string& pseudo) {
@@ -40,7 +44,7 @@ ProgramOptions parseArgs(int argc, char* argv[]) {
     // Check minimal number of arguments
     if (argc < 3) {
         std::cerr << "chat pseudo_utilisateur pseudo_destinataire [--bot] [--manuel]" << std::endl;
-        exit(MISSING_ARGS);  // Code 1
+        exit(MISSING_ARGS); // Code 1
     }
 
     ProgramOptions opts;
@@ -50,41 +54,32 @@ ProgramOptions parseArgs(int argc, char* argv[]) {
     // Check pseudonyms length
     if (opts.user.length() > MAX_PSEUDO_LENGTH || opts.dest.length() > MAX_PSEUDO_LENGTH) {
         std::cerr << "Erreur : pseudo trop long (max " << MAX_PSEUDO_LENGTH << " caractères)" << std::endl;
-        exit(PSEUDO_TOO_LONG);  // Code 2
+        exit(PSEUDO_TOO_LONG); // Code 2
     }
 
     // Check for invalid characters and invalid pseudos
     if (!validatePseudo(opts.user) || !validatePseudo(opts.dest)) {
-        exit(INVALID_CHARS);  // Code 3
+        exit(INVALID_CHARS); // Code 3
     }
 
     // Process options --bot and --manuel
     for (int i = 3; i < argc; i++) {
         std::string arg = argv[i];
         if (arg == "--bot") {
-            if (opts.isManual) {
-                std::cerr << "Erreur : impossible d'utiliser --bot et --manuel ensemble" << std::endl;
-                exit(INVALID_CHARS);
-            }
-            opts.isBot = true;
+            opts.isBot = true;  // Correction ici
         }
         else if (arg == "--manuel") {
-            if (opts.isBot) {
-                std::cerr << "Erreur : impossible d'utiliser --bot et --manuel ensemble" << std::endl;
-                exit(INVALID_CHARS);
-            }
-            opts.isManual = true;
+            opts.isManual = true;  // Correction ici
         }
         else {
             // Unknown parameter encountered
             std::cerr << "chat pseudo_utilisateur pseudo_destinataire [--bot] [--manuel]" << std::endl;
-            exit(MISSING_ARGS);  // Code 1
+            exit(MISSING_ARGS); // Code 1
         }
     }
 
     return opts;
 }
-
 
 void displayWelcome(const ProgramOptions& opts) {
     std::cout << "\n=== Chat démarré ===" << std::endl;
