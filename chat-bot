@@ -1,0 +1,83 @@
+#!/bin/bash
+
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+    echo "chat-bot destinataire [pseudo]" >&2
+    exit 1
+fi
+
+DESTINATAIRE="$1"
+BOT="${2:-bot}"
+
+# Fonction pour les commandes
+traiter_commande() {
+    local cmd="$1"
+    case "$cmd" in
+        "liste")
+            find . -maxdepth 1 -type f -readable -printf "%f\n" | sort | while read -r ligne; do
+                if [[ ! "$ligne" =~ ^\. ]]; then
+                    echo "$ligne"
+                fi
+            done
+            ;;
+        "li "*)
+            local fichier="${cmd#li }"
+            if [ -f "$fichier" ] && [ -r "$fichier" ]; then
+                while IFS= read -r ligne; do
+                    echo "$ligne"
+                done < "$fichier"
+            else
+                echo "Erreur: fichier '$fichier' introuvable"
+            fi
+            ;;
+        "qui suis-je")
+            echo "$DESTINATAIRE"
+            ;;
+        "au revoir")
+            echo "Au revoir!"
+            exit 0
+            ;;
+        *)
+            if [ -f "liste-bot.txt" ]; then
+                # Cherche la ligne qui commence exactement par la commande suivie d'un espace
+                local reponse=$(awk -v cmd="$cmd" '$1 == cmd {$1=""; print substr($0,2)}' liste-bot.txt)
+                if [ -n "$reponse" ]; then
+                    echo "$reponse"
+                else
+                    echo "🤖 ?"
+                fi
+            else
+                echo "🤖 ?"
+            fi
+            ;;
+    esac
+}
+
+# Démarrage du chat en mode bot
+coproc CHAT { ./chat "$BOT" "$DESTINATAIRE" --bot; }
+
+# Attente de l'initialisation
+while IFS= read -r ligne; do
+    if [[ "$ligne" == *"==================="* ]]; then
+        break
+    fi
+done <&${CHAT[0]}
+
+# Traitement des messages
+while IFS= read -r ligne; do
+    if [[ "$ligne" == *"L'autre utilisateur s'est déconnecté."* ]]; then
+        exit 0
+    fi
+
+    if [[ "$ligne" =~ \[(.*)\]\ *(.*) ]]; then
+        expediteur="${BASH_REMATCH[1]}"
+        message="${BASH_REMATCH[2]}"
+        
+        if [ -n "$message" ] && [ "$expediteur" = "$DESTINATAIRE" ]; then
+            while IFS= read -r reponse; do
+                [ -n "$reponse" ] && echo "$reponse" >&${CHAT[1]}
+            done < <(traiter_commande "$message")
+        fi
+    fi
+done <&${CHAT[0]}
+
+exit 0
