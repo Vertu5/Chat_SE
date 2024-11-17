@@ -1,6 +1,6 @@
 CXX = g++
 CXXFLAGS = -Wall -Wextra -Wpedantic -std=gnu++17 -O2 -I include
-LDFLAGS = -pthread -lrt
+LDFLAGS = -pthread 
 
 # Project directories
 SRC_DIR = src
