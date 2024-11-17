@@ -1,3 +1,8 @@
+/**
+ * @file shared_memory.hpp 
+ * @brief Définition de la gestion de la mémoire partagée pour les messages en mode manuel
+ */
+
 #pragma once
 #include <sys/mman.h>
 #include <sys/stat.h>

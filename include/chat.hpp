@@ -1,3 +1,8 @@
+/**
+ * @file chat.hpp 
+ * @brief Définition des variables globales et des fonctions utilitaires
+ */
+
 #pragma once
 #include <string>
 #include <iostream>

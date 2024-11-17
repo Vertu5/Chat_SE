@@ -1,3 +1,8 @@
+/**
+ * @file normal_mode.hpp 
+ * @brief Définition du mode normal du chat (utilisateur)
+ */
+
 #pragma once
 #include "chat_mode.hpp"
 
