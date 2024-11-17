@@ -64,9 +64,6 @@ done <&${CHAT[0]}
 
 # Traitement des messages
 while IFS= read -r ligne; do
-    if [[ "$ligne" == *"L'autre utilisateur s'est déconnecté."* ]]; then
-        exit 0
-    fi
 
     if [[ "$ligne" =~ \[(.*)\]\ *(.*) ]]; then
         expediteur="${BASH_REMATCH[1]}"
