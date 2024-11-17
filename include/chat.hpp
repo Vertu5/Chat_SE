@@ -79,4 +79,3 @@ namespace Chat {
     bool isPipeValid(const std::string& pipePath);
     void notifyMessageReceived();
 }
-
