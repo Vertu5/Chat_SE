@@ -1,6 +1,5 @@
 // signal_handler.cpp
 #include "signal_handler.hpp"
-#include "chat.hpp"
 #include <iostream>
 
 namespace Chat {

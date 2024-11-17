@@ -10,13 +10,8 @@ ManualMode::ManualMode(const ProgramOptions& opts,
                       const std::string& sendPipe,
                       const std::string& receivePipe)
     : ChatMode(opts, sendPipe, receivePipe) {
-    sharedMem = new SharedMemory(opts.user);
-    g_sharedMemory = sharedMem;
-}
-
-ManualMode::~ManualMode() {
-    g_sharedMemory = nullptr;
-    delete sharedMem;
+    sharedMem = std::make_unique<SharedMemory>(sizeof(SharedMemoryBuffer));
+    g_sharedMemory = sharedMem.get();  // Si vous devez garder cette référence globale
 }
 
 void ManualMode::runParentProcess() {
@@ -51,10 +46,13 @@ void ManualMode::runParentProcess() {
             if (sharedMem) {
                 std::cout << "\n";
                 sharedMem->displayMessages();
-                std::cout << "Message: " << std::flush;
+            }
+            if (g_opts.isBot) {
+                g_shutdown = 1;
+                g_running = 0;
+                break;
             }
             g_sigintReceived = 0;
-            // Clear std::cin error state
             std::cin.clear();
             continue;
         }
@@ -62,53 +60,52 @@ void ManualMode::runParentProcess() {
         if (g_displayPendingMessages) {
             if (sharedMem) {
                 std::cout << "\n";
+                std::cout << "Affichage de messages en attente:" << std::endl;
                 sharedMem->displayMessages();
-                std::cout << "Message: " << std::flush;
             }
             g_displayPendingMessages = 0;
+
         }
 
         if (g_sigpipeReceived) {
-            std::cout << "\nConnexion perdue avec l'autre utilisateur" << std::endl;
+            // affichage de message en attente avant de quitter
+            if (sharedMem) {
+                sharedMem->displayMessages();
+            }
             g_shutdown = 1;
             g_running = 0;
             break;
         }
 
-        std::cout << "Message: " << std::flush;
-
-        // if (!std::cin.good() || g_shutdown) {
-        //     g_running = 0;
-        //     break;
-        // }
-
         std::getline(std::cin, line);
 
-        // if (std::cin.eof() || line == "exit" || g_shutdown) {
-        //     g_running = 0;
-        //     break;
-        // }
-
-        Message msg;
-        strncpy(msg.from, opts.user.c_str(), MAX_PSEUDO_LENGTH);
-        strncpy(msg.to, opts.dest.c_str(), MAX_PSEUDO_LENGTH);
-        strncpy(msg.content, line.c_str(), sizeof(msg.content) - 1);
-
-        ssize_t bytesWritten = write(writeFd, &msg, sizeof(Message));
-        if (bytesWritten <= 0) {
-            if (errno == EINTR) continue;
-            std::cerr << "Erreur d'écriture" << std::endl;
+        if (line == "exit" || g_shutdown) {
             g_running = 0;
             break;
         }
 
-        // Utiliser displayMessage avec le flag isBot
-        if (!opts.isBot) {
-            displayMessage(msg, opts.isBot);
-        }
+        if (!line.empty()) {  
+            Message msg;
+            strncpy(msg.from, opts.user.c_str(), MAX_PSEUDO_LENGTH);
+            strncpy(msg.to, opts.dest.c_str(), MAX_PSEUDO_LENGTH);
+            strncpy(msg.content, line.c_str(), sizeof(msg.content) - 1);
 
-        if (sharedMem) {
-            sharedMem->displayMessages();
+            ssize_t bytesWritten = write(writeFd, &msg, sizeof(Message));
+            if (bytesWritten <= 0) {
+                if (errno == EINTR) continue;
+                std::cerr << "Erreur d'écriture" << std::endl;
+                g_running = 0;
+                break;
+            }
+
+            // Utiliser displayMessage avec le flag isBot
+            if (!opts.isBot) {
+                displayMessage(msg, opts.isBot);
+            }
+
+            if (sharedMem) {
+                sharedMem->displayMessages();
+            }
         }
     }
 
@@ -134,7 +131,6 @@ void ManualMode::runChildProcess() {
             communicationStarted = true;
             std::cout << '\a' << std::flush;
 
-            // Utiliser directement Message pour stocker
             sharedMem->addMessage(
                 opts.isBot ? 
                     "[" + std::string(msg.from) + "] " + msg.content :
@@ -148,6 +144,8 @@ void ManualMode::runChildProcess() {
             if (communicationStarted) {
                 std::cout << "\nL'autre utilisateur s'est déconnecté." << std::endl;
                 g_running = 0;
+                g_shutdown = 1;
+                kill(getppid(), SIGPIPE);  // Ajout de cette ligne pour notifier le parent pour qu il se deconnecte aussi
                 break;
             }
             continue;
@@ -155,6 +153,8 @@ void ManualMode::runChildProcess() {
             if (errno == EINTR) continue;
             std::cerr << "Erreur de lecture du pipe" << std::endl;
             g_running = 0;
+            g_shutdown = 1;
+            kill(getppid(), SIGPIPE);  // Ajout de cette ligne pour notifier le parent
             break;
         }
     }
@@ -162,5 +162,4 @@ void ManualMode::runChildProcess() {
     close(readFd);
     exit(SUCCESS);
 }
-
 }
