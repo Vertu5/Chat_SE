@@ -55,12 +55,6 @@ traiter_commande() {
 # Démarrage du chat en mode bot
 coproc CHAT { ./chat "$BOT" "$DESTINATAIRE" --bot; }
 
-# Attente de l'initialisation
-while IFS= read -r ligne; do
-    if [[ "$ligne" == *"==================="* ]]; then
-        break
-    fi
-done <&${CHAT[0]}
 
 # Traitement des messages
 while IFS= read -r ligne; do
