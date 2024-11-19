@@ -1,21 +1,11 @@
 #include "chat.hpp"
 #include <sys/stat.h>
+#include <iomanip>
 #include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
 
 namespace Chat {
-
-void ProgramOptions::print() const {
-    std::cout << "\nConfiguration du chat :" << std::endl;
-    std::cout << "- Utilisateur : " << user << std::endl;
-    std::cout << "- Destinataire : " << dest << std::endl;
-    std::string mode = "normal";
-    if (isBot && isManual) mode = "bot + manuel";
-    else if (isBot) mode = "bot";
-    else if (isManual) mode = "manuel";
-    std::cout << "- Mode : " << mode << std::endl;
-}
 
 bool validatePseudo(const std::string& pseudo) {
     // Check length (max 30 characters)
@@ -71,6 +61,9 @@ ProgramOptions parseArgs(int argc, char* argv[]) {
         else if (arg == "--manuel") {
             opts.isManual = true;  // Correction ici
         }
+        else if (arg == "--joli") {
+            opts.isJoli = true;
+        }
         else {
             // Unknown parameter encountered
             std::cerr << "chat pseudo_utilisateur pseudo_destinataire [--bot] [--manuel]" << std::endl;
@@ -82,10 +75,22 @@ ProgramOptions parseArgs(int argc, char* argv[]) {
 }
 
 void displayWelcome(const ProgramOptions& opts) {
-    std::cout << "\n=== Chat démarré ===" << std::endl;
-    opts.print();
-    std::cout << "Pour quitter, tapez 'exit'" << std::endl;
-    std::cout << "===================" << std::endl << std::endl;
+    if (opts.isJoli) {
+        std::string mode = "normal + joli";
+        if (opts.isBot && opts.isManual) mode = "bot + manuel + joli";
+        else if (opts.isBot) mode = "bot + joli";
+        else if (opts.isManual) mode = "manuel + joli";
+
+        std::cout << "\n╔════════════════════════════╗" << std::endl;
+        std::cout << "║      Chat démarré          ║" << std::endl;
+        std::cout << "╠════════════════════════════╣" << std::endl;
+        std::cout << "║ Utilisateur : " << std::left << std::setw(13) << opts.user << "║" << std::endl;
+        std::cout << "║ Destinataire : " << std::left << std::setw(12) << opts.dest << "║" << std::endl;
+        std::cout << "║ Mode : " << std::left << std::setw(20) << mode << "║" << std::endl;
+        std::cout << "╠════════════════════════════╣" << std::endl;
+        std::cout << "║ 'exit' pour quitter        ║" << std::endl;
+        std::cout << "╚════════════════════════════╝" << std::endl << std::endl;
+    }
 }
 
 void createPipes(const std::string& sendPipe, const std::string& receivePipe) {

@@ -14,8 +14,10 @@ NormalMode::NormalMode(const ProgramOptions& opts,
 void NormalMode::runParentProcess() {
     int writeFd = open(sendPipe.c_str(), O_WRONLY);
     if (writeFd == -1) {
-        std::cout << "En attente du destinataire..." << std::endl;
         
+        if (opts.isJoli) {
+            std::cout << "En attente du destinataire..." << std::endl;
+        }
         while (!g_shutdown && writeFd == -1) {
             writeFd = open(sendPipe.c_str(), O_WRONLY);
             if (writeFd == -1) {
@@ -24,7 +26,10 @@ void NormalMode::runParentProcess() {
         }
         
         if (g_shutdown) {
-            std::cerr << "Interruption pendant l'attente" << std::endl;
+            if (opts.isJoli) {
+                std::cerr << "Interruption pendant l'attente" << std::endl;
+            }
+            
             close(writeFd);
             exit(SYSTEM_ERROR);
         }
@@ -57,15 +62,16 @@ void NormalMode::runParentProcess() {
             }
             g_sigintReceived = 0;
         }
-        if (g_sigpipeReceived) {
-            std::cout << "\nConnexion perdue avec l'autre utilisateur" << std::endl;
+        if (g_sigpipeReceived) {          
             g_shutdown = 1;
             g_running = 0;
             g_sigpipeReceived = 0;
             break;
         }
 
-        //std::cout << "Message: " << std::flush;
+        // if (opts.isJoli) {
+        //     std::cout << "\rMessage: " << std::flush;
+        // }
         
         if (!std::cin.good() || g_shutdown) {
             g_running = 0;
@@ -95,6 +101,10 @@ void NormalMode::runParentProcess() {
             }
 
             if (!g_shutdown && g_running && !opts.isBot) {
+                // if (opts.isJoli) {
+                //     // Efface la ligne courante pour le message entrant
+                //     std::cout << "\r" << std::string(80, ' ') << "\r";
+                // }
                 displayMessage(msg, false);
             }
         }
@@ -134,9 +144,12 @@ void NormalMode::runChildProcess() {
                 if (bytesRead == 0 || (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)) {
                     noDataCount++;
                     if (noDataCount > 2) {
-                        std::cout << "\nL'autre utilisateur s'est déconnecté." << std::endl;
+                        if (opts.isJoli) {
+                            std::cout << "\nL'autre utilisateur s'est déconnecté." << std::endl;
+                        }
+                        
                         g_running = 0;
-                        g_shutdown = 1;  // Ajout de cette ligne
+                        g_shutdown = 1;  
                         kill(getppid(), SIGPIPE);  // Signal au parent
                         break;
                     }
@@ -147,13 +160,18 @@ void NormalMode::runChildProcess() {
             noDataCount = 0;
             if (!g_shutdown && g_running) {
                 displayMessage(msg, opts.isBot);
+                // if (opts.isJoli) {
+                //     std::cout << "Message: " << std::flush;  // Nouvelle ligne puis prompt
+                // }
             }
         }
         else if (ret == 0) {
             if (!isPipeValid(receivePipe)) {
-                std::cout << "\nL'autre utilisateur s'est déconnecté." << std::endl;
+                if (opts.isJoli) {
+                    std::cout << "\nL'autre utilisateur s'est déconnecté." << std::endl;
+                }
                 g_running = 0;
-                g_shutdown = 1;  // Ajout de cette ligne
+                g_shutdown = 1;  
                 kill(getppid(), SIGPIPE);  // Signal au parent
                 break;
             }

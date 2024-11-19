@@ -47,6 +47,7 @@ void ManualMode::runParentProcess() {
                 std::cout << "\n";
                 sharedMem->displayMessages();
             }
+            // gestion du mode Bot
             if (g_opts.isBot) {
                 g_shutdown = 1;
                 g_running = 0;
@@ -60,7 +61,9 @@ void ManualMode::runParentProcess() {
         if (g_displayPendingMessages) {
             if (sharedMem) {
                 std::cout << "\n";
-                std::cout << "Affichage de messages en attente:" << std::endl;
+                if (opts.isJoli) {
+                    std::cout << "Affichage de messages en attente:" << std::endl;
+                }
                 sharedMem->displayMessages();
             }
             g_displayPendingMessages = 0;
@@ -100,10 +103,18 @@ void ManualMode::runParentProcess() {
 
             // Utiliser displayMessage avec le flag isBot
             if (!opts.isBot) {
+                if (opts.isJoli) {
+                    // Efface la ligne courante pour le message entrant
+                    //std::cout << "\r" << std::string(80, ' ') << "\r";
+                }
                 displayMessage(msg, opts.isBot);
             }
 
             if (sharedMem) {
+                if (opts.isJoli) {
+                    // Efface la ligne courante pour le message entrant
+                    //std::cout << "\r" << std::string(80, ' ') << "\r";
+                }
                 sharedMem->displayMessages();
             }
         }
@@ -142,7 +153,10 @@ void ManualMode::runChildProcess() {
             }
         } else if (bytesRead == 0) {
             if (communicationStarted) {
-                std::cout << "\nL'autre utilisateur s'est déconnecté." << std::endl;
+                if (opts.isJoli) {
+                    std::cout << "\nL'autre utilisateur s'est déconnecté." << std::endl;
+                }
+
                 g_running = 0;
                 g_shutdown = 1;
                 kill(getppid(), SIGPIPE);  // Ajout de cette ligne pour notifier le parent pour qu il se deconnecte aussi
