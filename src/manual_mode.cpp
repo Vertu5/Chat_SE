@@ -142,11 +142,17 @@ void ManualMode::runChildProcess() {
             communicationStarted = true;
             std::cout << '\a' << std::flush;
 
-            sharedMem->addMessage(
-                opts.isBot ? 
-                    "[" + std::string(msg.from) + "] " + msg.content :
-                    "\x1B[4m[" + std::string(msg.from) + "]\x1B[0m " + msg.content
-            );
+            // Construction du message avec l'indentation appropriée
+            std::string formattedMsg;
+            if (opts.isJoli && msg.from != g_opts.user && msg.to == g_opts.user) {
+                formattedMsg = std::string(40, ' ');
+            }
+            
+            formattedMsg += opts.isBot ? 
+                "[" + std::string(msg.from) + "] " + msg.content :
+                "\x1B[4m[" + std::string(msg.from) + "]\x1B[0m " + msg.content;
+
+            sharedMem->addMessage(formattedMsg);
 
             if (sharedMem->shouldDisplay()) {
                 kill(getppid(), SIGUSR1);
