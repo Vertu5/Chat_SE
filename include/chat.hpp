@@ -55,8 +55,7 @@ namespace Chat {
         std::string dest;
         bool isBot = false;
         bool isManual = false;
-        
-        void print() const;
+        bool isJoli = false;  
     };
 
     // Global variables

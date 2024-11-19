@@ -1,3 +1,8 @@
+/**
+ * @file manual_mode.hpp 
+ * @brief Définition du mode manuel du chat (utilisateur)
+ */
+
 #pragma once
 #include "chat_mode.hpp"
 #include "shared_memory.hpp"
