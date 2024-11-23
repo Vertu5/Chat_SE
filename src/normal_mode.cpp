@@ -1,56 +1,27 @@
 #include "normal_mode.hpp"
-#include <fcntl.h>
-#include <unistd.h>
-#include <errno.h>
+#include "pipes.hpp"
 #include <sys/select.h>
 
 namespace Chat {
 
 NormalMode::NormalMode(const ProgramOptions& opts, 
-                       const std::string& sendPipe, 
-                       const std::string& receivePipe)
+                      const std::string& sendPipe, 
+                      const std::string& receivePipe)
     : ChatMode(opts, sendPipe, receivePipe) {}
 
 void NormalMode::runParentProcess() {
-    int writeFd = open(sendPipe.c_str(), O_WRONLY);
-    if (writeFd == -1) {
-        
-        if (opts.isJoli) {
-            std::cout << "En attente du destinataire..." << std::endl;
-        }
-        while (!g_shutdown && writeFd == -1) {
-            writeFd = open(sendPipe.c_str(), O_WRONLY);
-            if (writeFd == -1) {
-                usleep(500000);
-            }
-        }
-        
-        if (g_shutdown) {
-            if (opts.isJoli) {
-                std::cerr << "Interruption pendant l'attente" << std::endl;
-            }
-            
-            close(writeFd);
-            exit(SYSTEM_ERROR);
-        }
-    }
+    auto result = Pipes::openWritePipe(sendPipe, opts);
+    int writeFd = result.fd;
 
-    int flags = fcntl(writeFd, F_GETFL);
-    if (flags == -1) {
-        std::cerr << "Erreur récupération flags" << std::endl;
-        close(writeFd);
-        exit(SYSTEM_ERROR);
-    }
-    
-    if (fcntl(writeFd, F_SETFL, flags | O_NONBLOCK) == -1) {
-        std::cerr << "Erreur passage mode non-bloquant" << std::endl;
+    // Passage en mode non-bloquant pour l'écriture
+    if (!Pipes::setupPipeFlags(writeFd, true)) {
         close(writeFd);
         exit(SYSTEM_ERROR);
     }
 
     std::string line;
     while (!g_shutdown && g_running) {
-        // Check for signals
+        // Gestion des signaux
         if (g_sigintReceived) {
             if (g_signalStage == INIT) {
                 std::cerr << "\nInterruption pendant l'initialisation..." << std::endl;
@@ -68,10 +39,6 @@ void NormalMode::runParentProcess() {
             g_sigpipeReceived = 0;
             break;
         }
-
-        // if (opts.isJoli) {
-        //     std::cout << "\rMessage: " << std::flush;
-        // }
         
         if (!std::cin.good() || g_shutdown) {
             g_running = 0;
@@ -86,25 +53,19 @@ void NormalMode::runParentProcess() {
         }
 
         if (!line.empty()) {
-
             Message msg;
             strncpy(msg.from, opts.user.c_str(), MAX_PSEUDO_LENGTH);
             strncpy(msg.to, opts.dest.c_str(), MAX_PSEUDO_LENGTH);
             strncpy(msg.content, line.c_str(), sizeof(msg.content) - 1);
 
-            if (!g_shutdown && write(writeFd, &msg, sizeof(Message)) <= 0) {
-                if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                    std::cerr << "Erreur d'écriture" << std::endl;
-                    g_running = 0;
-                    break;
-                }
+            ssize_t bytesWritten = write(writeFd, &msg, sizeof(Message));
+            if (bytesWritten <= 0 && !Pipes::isNormalError(bytesWritten, errno)) {
+                std::cerr << "Erreur d'écriture" << std::endl;
+                g_running = 0;
+                break;
             }
 
             if (!g_shutdown && g_running && !opts.isBot) {
-                // if (opts.isJoli) {
-                //     // Efface la ligne courante pour le message entrant
-                //     std::cout << "\r" << std::string(80, ' ') << "\r";
-                // }
                 displayMessage(msg, false);
             }
         }
@@ -116,12 +77,8 @@ void NormalMode::runParentProcess() {
 void NormalMode::runChildProcess() {
     signal(SIGINT, SIG_IGN);
 
-    int readFd = open(receivePipe.c_str(), O_RDONLY | O_NONBLOCK);
-    if (readFd == -1) {
-        std::cerr << "Erreur ouverture pipe lecture" << std::endl;
-        exit(PIPE_ERROR);
-    }
-
+    int readFd = Pipes::initializeReadPipe(receivePipe, true);
+    
     fd_set readfds;
     struct timeval tv;
     int noDataCount = 0;
@@ -141,16 +98,15 @@ void NormalMode::runChildProcess() {
             ssize_t bytesRead = read(readFd, &msg, sizeof(Message));
             
             if (bytesRead <= 0) {
-                if (bytesRead == 0 || (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)) {
+                if (!Pipes::isNormalError(bytesRead, errno)) {
                     noDataCount++;
                     if (noDataCount > 2) {
                         if (opts.isJoli) {
                             std::cout << "\nL'autre utilisateur s'est déconnecté." << std::endl;
                         }
-                        
                         g_running = 0;
-                        g_shutdown = 1;  
-                        kill(getppid(), SIGPIPE);  // Signal au parent
+                        g_shutdown = 1;
+                        kill(getppid(), SIGPIPE);
                         break;
                     }
                 }
@@ -160,26 +116,21 @@ void NormalMode::runChildProcess() {
             noDataCount = 0;
             if (!g_shutdown && g_running) {
                 displayMessage(msg, opts.isBot);
-                // if (opts.isJoli) {
-                //     std::cout << "Message: " << std::flush;  // Nouvelle ligne puis prompt
-                // }
             }
         }
-        else if (ret == 0) {
-            if (!isPipeValid(receivePipe)) {
-                if (opts.isJoli) {
-                    std::cout << "\nL'autre utilisateur s'est déconnecté." << std::endl;
-                }
-                g_running = 0;
-                g_shutdown = 1;  
-                kill(getppid(), SIGPIPE);  // Signal au parent
-                break;
+        else if (ret == 0 && !isPipeValid(receivePipe)) {
+            if (opts.isJoli) {
+                std::cout << "\nL'autre utilisateur s'est déconnecté." << std::endl;
             }
+            g_running = 0;
+            g_shutdown = 1;
+            kill(getppid(), SIGPIPE);
+            break;
         }
     }
 
     close(readFd);
     exit(SUCCESS);
 }
-}
 
+}  // namespace Chat
